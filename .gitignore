@@ -1,0 +1,20 @@
+# Derlenmiş Python dosyaları
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ortam değişkenleri
+.env
+
+# Sanal ortam
+venv/
+env/
+ENV/
+.venv/
+
+# IDE dosyaları
+.vscode/
+.idea/
+
+# Mac / Sistem dosyaları
+.DS_Store

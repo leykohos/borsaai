@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BorsaAI – ALBRK Teknik Analiz</title>
+  <meta name="description" content="ALBRK hissesi için MACD, RSI, Stochastic RSI, Bollinger Bandı indikatörleri ve Gemini AI ile yapay zeka borsa analizi." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Chart.js core -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Date adapter (required for time axis) -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <!-- Candlestick / OHLC plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.1.1/dist/chartjs-chart-financial.min.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">📈</div>
+        <div>
+          <span class="logo-title">BorsaAI</span>
+          <span class="logo-sub">Teknik Analiz Robotu</span>
+        </div>
+      </div>
+      <div class="header-info">
+        <div class="badge badge-symbol">ALBRK.IS</div>
+        <div class="badge badge-live" id="statusBadge">⏳ Yükleniyor...</div>
+        <div class="last-price-header" id="headerPrice">—</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stats Bar -->
+  <section class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-label">Son Fiyat</div>
+      <div class="stat-value" id="valPrice">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">RSI (14)</div>
+      <div class="stat-value" id="valRsi">—</div>
+      <div class="stat-note" id="noteRsi"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">MACD</div>
+      <div class="stat-value" id="valMacd">—</div>
+      <div class="stat-note" id="noteMacd"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Stoch RSI K</div>
+      <div class="stat-value" id="valStoch">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Bollinger Pozisyonu</div>
+      <div class="stat-value" id="valBoll">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Toplam Al Sinyali</div>
+      <div class="stat-value accent" id="valSignals">—</div>
+      <div class="stat-note">Son 3 yıl</div>
+    </div>
+  </section>
+
+  <!-- Main Layout -->
+  <main class="main-grid">
+
+    <!-- Left Column: Charts -->
+    <div class="charts-col">
+
+      <!-- Period Switcher -->
+      <div class="period-bar">
+        <span class="period-label">Periyot:</span>
+        <div class="period-btns">
+          <button class="period-btn" data-interval="1h"  id="btn-1h">Saatlik</button>
+          <button class="period-btn active" data-interval="1d"  id="btn-1d">Günlük</button>
+          <button class="period-btn" data-interval="1wk" id="btn-1wk">Haftalık</button>
+          <button class="period-btn" data-interval="1mo" id="btn-1mo">Aylık</button>
+        </div>
+        <div class="chart-type-btns">
+          <button class="ctype-btn active" id="btnLine" onclick="setChartType('line')">📈 Çizgi</button>
+          <button class="ctype-btn" id="btnCandle" onclick="setChartType('candlestick')">🕯️ Mum</button>
+        </div>
+        <div class="period-info" id="periodInfo">Son 3 Yıl · Günlük</div>
+      </div>
+
+      <!-- Price + Bollinger / Candlestick -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">
+            <span class="chart-dot dot-blue"></span>
+            <span id="priceChartTitle">Fiyat & Bollinger Bantları</span>
+          </div>
+          <div class="chart-legend" id="priceLegend">
+            <span class="legend-item"><span class="legend-dot" style="background:#00d4ff"></span>Kapanış</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#a855f7"></span>Üst Band</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#6366f1"></span>SMA20</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#f43f5e"></span>Alt Band</span>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="priceChart"></canvas>
+        </div>
+      </div>
+
+      <!-- MACD -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title"><span class="chart-dot dot-purple"></span>MACD (12, 26, 9)</div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#00d4ff"></span>MACD</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Signal</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>Histogram</span>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap-sm"><canvas id="macdChart"></canvas></div>
+      </div>
+
+      <!-- RSI -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title"><span class="chart-dot dot-green"></span>RSI (14)</div>
+          <div class="rsi-levels">
+            <span class="level-tag tag-red">70 Aşırı Alım</span>
+            <span class="level-tag tag-green">30 Aşırı Satım</span>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap-sm"><canvas id="rsiChart"></canvas></div>
+      </div>
+
+      <!-- Stochastic RSI -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title"><span class="chart-dot dot-orange"></span>Stochastic RSI (14)</div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:#00d4ff"></span>%K</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>%D</span>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap-sm"><canvas id="stochChart"></canvas></div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Signals & AI -->
+    <div class="sidebar-col">
+
+      <!-- AI Analysis -->
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-icon">🤖</div>
+          <div>
+            <div class="ai-title">Gemini AI Analiz</div>
+            <div class="ai-sub">Teknik görünüm yorumu</div>
+          </div>
+        </div>
+        <button class="ai-btn" id="analyzeBtn" onclick="runAnalysis()">
+          <span id="btnText">⚡ AI Analizi Başlat</span>
+        </button>
+        <div class="ai-result" id="aiResult">
+          <div class="ai-placeholder">
+            <div class="ai-placeholder-icon">🧠</div>
+            <p>AI analizi için butona tıklayın. Gemini, güncel indikatör verilerini yorumlayacak ve kısa vadeli senaryo sunacak.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signal History -->
+      <div class="signals-card">
+        <div class="signals-header">
+          <div class="signals-title">📊 Al Sinyali Geçmişi</div>
+          <div class="signals-sub">Son 3 Yıl – İndikatör Tetiklemeleri</div>
+        </div>
+        <div class="signals-summary" id="signalsSummary"></div>
+        <div class="table-wrap">
+          <table class="signals-table" id="signalsTable">
+            <thead>
+              <tr>
+                <th>Tarih</th>
+                <th>Fiyat</th>
+                <th>RSI</th>
+                <th>1H</th>
+                <th>2H</th>
+                <th>1A</th>
+                <th>3A</th>
+                <th>Neden</th>
+              </tr>
+            </thead>
+            <tbody id="signalsBody">
+              <tr><td colspan="8" class="loading-row">⏳ Sinyaller hesaplanıyor...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>⚠️ Bu uygulama eğitim amaçlıdır. Yatırım tavsiyesi değildir. Veriler Yahoo Finance'den çekilmektedir.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

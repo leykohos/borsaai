@@ -494,3 +494,53 @@ body::before {
   .chart-wrap { height: 200px; }
   .chart-wrap-sm { height: 130px; }
 }
+
+/* Portfolio & Nav Styles */
+.nav-btn {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(99,156,255,0.1);
+  color: #94a3b8;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 500;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.nav-btn:hover {
+  background: rgba(0,212,255,0.05);
+  color: #fff;
+}
+.nav-btn.active {
+  background: rgba(0,212,255,0.1);
+  border-color: rgba(0,212,255,0.3);
+  color: #00d4ff;
+  box-shadow: 0 0 15px rgba(0,212,255,0.1);
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.2s;
+}
+.star-btn:hover {
+  transform: scale(1.2);
+}
+.star-btn.active {
+  color: #f59e0b;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+
+.portfolio-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}

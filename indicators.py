@@ -44,64 +44,174 @@ def calculate_bollinger(close: pd.Series, period=20, std_dev=2):
     return upper, middle, lower
 
 
-def find_buy_signals(df: pd.DataFrame):
+def calculate_sma(close: pd.Series, period=20):
+    return close.rolling(window=period).mean()
+
+
+def calculate_ema(close: pd.Series, period=20):
+    return close.ewm(span=period, adjust=False).mean()
+
+
+def calculate_atr(df: pd.DataFrame, period=14):
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift())
+    low_close = np.abs(df['low'] - df['close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = np.max(ranges, axis=1)
+    return true_range.rolling(window=period).mean()
+
+
+def calculate_supertrend(df: pd.DataFrame, period=10, multiplier=3):
+    atr = calculate_atr(df, period)
+    hl2 = (df['high'] + df['low']) / 2
+    final_upperband = hl2 + (multiplier * atr)
+    final_lowerband = hl2 - (multiplier * atr)
+
+    supertrend = pd.Series(index=df.index, dtype=float)
+    direction = pd.Series(index=df.index, dtype=int)
+
+    for i in range(period, len(df)):
+        if df['close'].iloc[i] > final_upperband.iloc[i-1]:
+            direction.iloc[i] = 1
+        elif df['close'].iloc[i] < final_lowerband.iloc[i-1]:
+            direction.iloc[i] = -1
+        else:
+            direction.iloc[i] = direction.iloc[i-1]
+            if direction.iloc[i] == 1 and final_lowerband.iloc[i] < final_lowerband.iloc[i-1]:
+                final_lowerband.iloc[i] = final_lowerband.iloc[i-1]
+            if direction.iloc[i] == -1 and final_upperband.iloc[i] > final_upperband.iloc[i-1]:
+                final_upperband.iloc[i] = final_upperband.iloc[i-1]
+
+        supertrend.iloc[i] = final_lowerband.iloc[i] if direction.iloc[i] == 1 else final_upperband.iloc[i]
+
+    return supertrend, direction
+
+
+def calculate_adx(df: pd.DataFrame, period=14):
+    up_move = df['high'] - df['high'].shift(1)
+    down_move = df['low'].shift(1) - df['low']
+    
+    pos_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
+    neg_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
+    
+    pos_dm = pd.Series(pos_dm, index=df.index).ewm(alpha=1/period, adjust=False).mean()
+    neg_dm = pd.Series(neg_dm, index=df.index).ewm(alpha=1/period, adjust=False).mean()
+    
+    atr = calculate_atr(df, period)
+    
+    pdi = 100 * (pos_dm / atr)
+    mdi = 100 * (neg_dm / atr)
+    
+    dx = 100 * np.abs(pdi - mdi) / (pdi + mdi)
+    adx = dx.ewm(alpha=1/period, adjust=False).mean()
+    return adx, pdi, mdi
+
+
+def find_signals(df: pd.DataFrame):
     """
-    Al sinyallerini tespit eder.
-    Kriter: RSI < 35 VE (MACD histogram 0'ın üstüne çıktı) VE fiyat Bollinger alt bandına yakın/altında
+    Tüm göstergelerden gelen Al/Sat sinyallerini tespit eder.
+    Her sinyal için kaynağı (RSI, MACD, vs.) ve yönü döner.
+    Artık indikatör verilerini de içerir.
     """
     signals = []
-    for i in range(1, len(df)):
+    
+    for i in range(2, len(df)):
         row = df.iloc[i]
         prev = df.iloc[i - 1]
+        
+        t = df.index[i]
+        date_str = t.strftime('%Y-%m-%d %H:%M') if (t.hour != 0 or t.minute != 0) else t.strftime('%Y-%m-%d')
+        
+        price = round(float(row['close']), 2)
+        rsi_val = round(float(row['rsi']), 1) if 'rsi' in row else 0
+        stoch_k = round(float(row['stoch_k']), 1) if 'stoch_k' in row else 0
+        macd_h = round(float(row['macd_hist']), 4) if 'macd_hist' in row else 0
+        st_dir = int(row['st_dir']) if 'st_dir' in row else 0
 
-        rsi_oversold = row['rsi'] < 35
-        macd_crossover = (prev['macd_hist'] < 0) and (row['macd_hist'] > 0)
-        near_lower_band = row['close'] <= row['bb_lower'] * 1.02  # %2 tolerans
+        # Genel Trend (Filtreleme amaçlı)
+        trend_up = row.get('st_dir', 1) == 1 and row.get('ema20', 0) > row.get('sma20', 0)
 
-        if rsi_oversold or (macd_crossover and near_lower_band):
-            reason = []
-            if rsi_oversold:
-                reason.append("RSI Aşırı Satım")
-            if macd_crossover:
-                reason.append("MACD Kesişim")
-            if near_lower_band:
-                reason.append("Bollinger Alt Band")
+        common_data = {
+            'date': date_str, 
+            'price': price, 
+            'rsi': rsi_val,
+            'stoch_k': stoch_k,
+            'macd_h': macd_h,
+            'trend': 'BOĞA' if trend_up else 'AYI'
+        }
 
-            signals.append({
-                'date': df.index[i].strftime('%Y-%m-%d'),
-                'price': round(float(row['close']), 2),
-                'rsi': round(float(row['rsi']), 1),
-                'macd_hist': round(float(row['macd_hist']), 4),
-                'reason': ' + '.join(reason),
-            })
+        # RSI Sinyalleri
+        if prev['rsi'] < 35 and row['rsi'] >= 35:
+            signals.append({**common_data, 'type': 'Buy', 'indicator': 'RSI', 'reason': 'RSI 35 Yukarı Kesti'})
+        elif prev['rsi'] > 65 and row['rsi'] <= 65:
+            signals.append({**common_data, 'type': 'Sell', 'indicator': 'RSI', 'reason': 'RSI 65 Aşağı Kesti'})
+            
+        # Stoch RSI Sinyalleri
+        if prev['stoch_k'] < prev['stoch_d'] and row['stoch_k'] > row['stoch_d'] and row['stoch_k'] < 80:
+            signals.append({**common_data, 'type': 'Buy', 'indicator': 'StochRSI', 'reason': 'Stoch K, D yi Yukarı Kesti'})
+        elif prev['stoch_k'] > prev['stoch_d'] and row['stoch_k'] < prev['stoch_d'] and row['stoch_k'] > 20:
+            signals.append({**common_data, 'type': 'Sell', 'indicator': 'StochRSI', 'reason': 'Stoch K, D yi Aşağı Kesti'})
+            
+        # Hareketli Ortalamalar Sinyalleri (EMA, SMA)
+        if prev['ema20'] < prev['sma20'] and row['ema20'] > row['sma20']:
+            signals.append({**common_data, 'type': 'Buy', 'indicator': 'HA_Kesişim', 'reason': 'EMA20, SMA20 yi Yukarı Kesti'})
+        elif prev['ema20'] > prev['sma20'] and row['ema20'] < row['sma20']:
+            signals.append({**common_data, 'type': 'Sell', 'indicator': 'HA_Kesişim', 'reason': 'EMA20, SMA20 yi Aşağı Kesti'})
+            
+        # MACD Sinyalleri
+        if prev['macd_hist'] < 0 and row['macd_hist'] > 0:
+            signals.append({**common_data, 'type': 'Buy', 'indicator': 'MACD', 'reason': 'MACD Yukarı Kesti'})
+        elif prev['macd_hist'] > 0 and row['macd_hist'] < 0:
+            signals.append({**common_data, 'type': 'Sell', 'indicator': 'MACD', 'reason': 'MACD Aşağı Kesti'})
+            
+        # Supertrend Sinyalleri
+        if 'st_dir' in df.columns:
+            if prev['st_dir'] == -1 and row['st_dir'] == 1:
+                signals.append({**common_data, 'type': 'Buy', 'indicator': 'Supertrend', 'reason': 'Supertrend Al'})
+            elif prev['st_dir'] == 1 and row['st_dir'] == -1:
+                signals.append({**common_data, 'type': 'Sell', 'indicator': 'Supertrend', 'reason': 'Supertrend Sat'})
 
     return signals
 
 
-def compute_signal_returns(df: pd.DataFrame, signals: list):
-    """Her al sinyali sonrasında 1W, 2W, 1M, 3M getirilerini hesaplar."""
-    results = []
-    close = df['close']
-    dates = df.index
-
-    for sig in signals:
-        sig_date = pd.Timestamp(sig['date'])
-        idx_list = dates.get_indexer([sig_date], method='nearest')
-        idx = idx_list[0]
-        entry_price = sig['price']
-
-        def pct(days_ahead):
-            target_idx = idx + days_ahead
-            if target_idx < len(close):
-                return round((close.iloc[target_idx] / entry_price - 1) * 100, 2)
-            return None
-
-        results.append({
-            **sig,
-            'ret_1w': pct(5),
-            'ret_2w': pct(10),
-            'ret_1m': pct(21),
-            'ret_3m': pct(63),
-        })
-
-    return results
+def simulate_spot_trades(signals: list):
+    """
+    Sinyal listesini zaman sırasına göre okuyup, her indikatör için ayrı ayrı
+    ilk 'Buy' sinyalinde spot işlem girip ilk 'Sell' sinyalinde çıkarak kâr/zarar durumunu hesaplar.
+    """
+    signals_sorted = sorted(signals, key=lambda x: x['date'])
+    trades = []
+    
+    positions = {}
+    
+    for sig in signals_sorted:
+        ind = sig['indicator']
+        if ind not in positions:
+            positions[ind] = {'in_position': False, 'entry_signal': None}
+            
+        pos = positions[ind]
+        
+        if not pos['in_position'] and sig['type'] == 'Buy':
+            pos['in_position'] = True
+            pos['entry_signal'] = sig
+        elif pos['in_position'] and sig['type'] == 'Sell':
+            exit_price = sig['price']
+            entry_signal = pos['entry_signal']
+            entry_price = entry_signal['price']
+            ret_pct = round((exit_price / entry_price - 1) * 100, 2)
+            
+            trades.append({
+                'entry_date': entry_signal['date'],
+                'entry_price': entry_price,
+                'entry_reason': entry_signal['reason'],
+                'entry_indicator': entry_signal['indicator'],
+                'exit_date': sig['date'],
+                'exit_price': exit_price,
+                'exit_reason': sig['reason'],
+                'exit_indicator': sig['indicator'],
+                'profit_pct': ret_pct
+            })
+            pos['in_position'] = False
+            
+    trades = sorted(trades, key=lambda x: x['entry_date'])
+    return trades
